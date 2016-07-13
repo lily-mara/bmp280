@@ -1,0 +1,8 @@
+[package]
+authors = ["Nate Mara <natemara@gmail.com>"]
+name = "bmp280"
+version = "0.1.0"
+
+[dependencies]
+byteorder = "0.5.3"
+i2cdev = "0.3.0"
