@@ -1,5 +1,6 @@
 extern crate i2cdev;
 extern crate byteorder;
+extern crate core;
 
 use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
 use i2cdev::core::I2CDevice;
@@ -10,7 +11,7 @@ use std::io::Cursor;
 const DEFAULT_I2C_ADDRESS: u16 = 0x77;
 const DEFAULT_I2C_PATH: &'static str = "/dev/i2c-1";
 
-type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Error>;
 type Endiness = BigEndian;
 
 enum Error {
@@ -120,7 +121,13 @@ struct Calibration {
     dig_h6: i8,
 }
 
-struct Bmp280 {
+impl core::default::Default for Calibration {
+    fn default() -> Self {
+        unsafe { core::mem::zeroed() }
+    }
+}
+
+pub struct Bmp280 {
     sensor_id: i32,
     fine: i32,
     calibration: Calibration,
@@ -158,24 +165,32 @@ impl Builder {
     }
 
     pub fn build(self) -> Result<Bmp280> {
-        match self.i2c_device {
-            Some(dev) => Ok(Bmp280 { i2c_device: dev }),
-            None => {
-                let dev = try!(LinuxI2CDevice::new(self.i2c_path, self.i2c_address));
-                Ok(Bmp280 { i2c_device: dev })
-            }
-        }
+        let dev = match self.i2c_device {
+            Some(dev) => dev,
+            None => try!(LinuxI2CDevice::new(self.i2c_path, self.i2c_address)),
+        };
+
+        let mut sensor = Bmp280 {
+            i2c_device: dev,
+            sensor_id: 0,
+            calibration: Calibration::default(),
+            fine: 0,
+        };
+
+        try!(sensor.begin());
+
+        Ok(sensor)
     }
 }
 
 impl Bmp280 {
-    fn write8(&self, reg: &Register, value: u8) -> Result<()> {
+    fn write8(&mut self, reg: &Register, value: u8) -> Result<()> {
         try!(self.i2c_device.write(&[reg.into()]));
         try!(self.i2c_device.write(&[value]));
         Ok(())
     }
 
-    fn read8(&self, reg: &Register) -> Result<u8> {
+    fn read8(&mut self, reg: &Register) -> Result<u8> {
         let mut buf = [0u8; 1];
 
         try!(self.i2c_device.write(&[reg.into()]));
@@ -188,7 +203,7 @@ impl Bmp280 {
         Ok(val)
     }
 
-    fn write16(&self, reg: &Register, value: u16) -> Result<()> {
+    fn write16(&mut self, reg: &Register, value: u16) -> Result<()> {
         let mut buf = vec![0u8, 0u8];
         try!(buf.write_u16::<Endiness>(value));
 
@@ -198,7 +213,7 @@ impl Bmp280 {
         Ok(())
     }
 
-    fn read16(&self, reg: &Register) -> Result<u16> {
+    fn read16(&mut self, reg: &Register) -> Result<u16> {
         let mut buf = [0u8; 2];
 
         try!(self.i2c_device.write(&[reg.into()]));
@@ -211,7 +226,7 @@ impl Bmp280 {
         Ok(val)
     }
 
-    fn read16s(&self, reg: &Register) -> Result<i16> {
+    fn read16s(&mut self, reg: &Register) -> Result<i16> {
         let mut buf = [0u8; 2];
 
         try!(self.i2c_device.write(&[reg.into()]));
@@ -224,7 +239,7 @@ impl Bmp280 {
         Ok(val)
     }
 
-    fn read16le(&self, reg: &Register) -> Result<u16> {
+    fn read16le(&mut self, reg: &Register) -> Result<u16> {
         let mut buf = [0u8; 2];
 
         try!(self.i2c_device.write(&[reg.into()]));
@@ -237,7 +252,7 @@ impl Bmp280 {
         Ok(val)
     }
 
-    fn read16les(&self, reg: &Register) -> Result<i16> {
+    fn read16les(&mut self, reg: &Register) -> Result<i16> {
         let mut buf = [0u8; 2];
 
         try!(self.i2c_device.write(&[reg.into()]));
@@ -250,7 +265,7 @@ impl Bmp280 {
         Ok(val)
     }
 
-    fn read24(&self, reg: &Register) -> Result<u32> {
+    fn read24(&mut self, reg: &Register) -> Result<u32> {
         let mut buf = [0u8; 3];
 
         try!(self.i2c_device.write(&[reg.into()]));
