@@ -4,7 +4,6 @@ extern crate core;
 
 use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
 use i2cdev::core::I2CDevice;
-use std::path::Path;
 use byteorder::{LittleEndian, BigEndian, WriteBytesExt, ReadBytesExt};
 use std::io::Cursor;
 
@@ -14,7 +13,7 @@ const DEFAULT_I2C_PATH: &'static str = "/dev/i2c-1";
 pub type Result<T> = std::result::Result<T, Error>;
 type Endiness = BigEndian;
 
-enum Error {
+pub enum Error {
     I2cError(LinuxI2CError),
     IoError(std::io::Error),
     Other(()),
@@ -132,20 +131,23 @@ pub struct Bmp280 {
     fine: i32,
     calibration: Calibration,
     i2c_device: LinuxI2CDevice,
+    ground_pressure: f32,
 }
 
-pub struct Builder {
+pub struct Bmp280Builder {
     i2c_address: u16,
     i2c_device: Option<LinuxI2CDevice>,
     i2c_path: String,
+    ground_pressure: f32,
 }
 
-impl Builder {
+impl Bmp280Builder {
     pub fn new() -> Self {
-        Builder {
+        Bmp280Builder {
             i2c_address: DEFAULT_I2C_ADDRESS,
             i2c_device: Option::None,
             i2c_path: DEFAULT_I2C_PATH.to_string(),
+            ground_pressure: 0.,
         }
     }
 
@@ -164,6 +166,11 @@ impl Builder {
         self
     }
 
+    pub fn ground_pressure(&mut self, pressure: f32) -> &mut Self {
+        self.ground_pressure = pressure;
+        self
+    }
+
     pub fn build(self) -> Result<Bmp280> {
         let dev = match self.i2c_device {
             Some(dev) => dev,
@@ -175,9 +182,14 @@ impl Builder {
             sensor_id: 0,
             calibration: Calibration::default(),
             fine: 0,
+            ground_pressure: self.ground_pressure,
         };
 
         try!(sensor.begin());
+
+        if self.ground_pressure != 0. {
+            try!(sensor.zero());
+        }
 
         Ok(sensor)
     }
@@ -187,6 +199,12 @@ impl Bmp280 {
     fn write8(&mut self, reg: &Register, value: u8) -> Result<()> {
         try!(self.i2c_device.write(&[reg.into()]));
         try!(self.i2c_device.write(&[value]));
+        Ok(())
+    }
+
+    pub fn zero(&mut self) -> Result<()> {
+        self.ground_pressure = try!(self.read_pressure());
+
         Ok(())
     }
 
@@ -308,27 +326,27 @@ impl Bmp280 {
     }
 
     pub fn read_temperature(&mut self) -> Result<f32> {
-        let mut adc_T = try!(self.read24(&Register::TempData)) as i32;
-        adc_T >>= 4;
+        let mut adc_t = try!(self.read24(&Register::TempData)) as i32;
+        adc_t >>= 4;
 
         let t1 = self.calibration.dig_t1 as i32;
         let t2 = self.calibration.dig_t2 as i32;
         let t3 = self.calibration.dig_t3 as i32;
 
-        let var1 = ((((adc_T >> 3) - (t1 << 1))) * t2) >> 11;
-        let var2 = (((((adc_T >> 4) - t1) * ((adc_T >> 4) - t1)) >> 12) * t3) >> 14;
+        let var1 = ((((adc_t >> 3) - (t1 << 1))) * t2) >> 11;
+        let var2 = (((((adc_t >> 4) - t1) * ((adc_t >> 4) - t1)) >> 12) * t3) >> 14;
 
         self.fine = var1 + var2;
 
-        let T = ((self.fine * 5 + 128) >> 8) as f32;
-        Ok(T / 100.)
+        let t = ((self.fine * 5 + 128) >> 8) as f32;
+        Ok(t / 100.)
     }
 
     pub fn read_pressure(&mut self) -> Result<f32> {
         // This is done to initialize the self.fine value.
         try!(self.read_temperature());
 
-        let adc_P = (try!(self.read24(&Register::PressureData)) as i32) >> 4;
+        let adc_p = (try!(self.read24(&Register::PressureData)) as i32) >> 4;
 
         let p1 = self.calibration.dig_p1 as i64;
         let p2 = self.calibration.dig_p2 as i64;
@@ -354,7 +372,7 @@ impl Bmp280 {
         }
 
 
-        let p: i64 = 1048576 - adc_P as i64;
+        let p: i64 = 1048576 - adc_p as i64;
         let p = (((p << 31) - var2) * 3125) / var1;
 
         let var1 = (p9 * (p >> 13) * (p >> 13)) >> 25;
@@ -365,11 +383,16 @@ impl Bmp280 {
         Ok(p as f32 / 256.)
     }
 
-
-    fn read_altitude(&mut self, sea_level_hpa: f32) -> Result<f32> {
+    pub fn read_altitude_relative_to(&mut self, sea_level_hpa: f32) -> Result<f32> {
         let pressure = try!(self.read_pressure()) as f32 / 100.;
 
         let altitude = 44330. * (1. - (pressure / sea_level_hpa).powf(0.1903));
         Ok(altitude)
+    }
+
+    pub fn read_altitude(&mut self) -> Result<f32> {
+        let pressure = self.ground_pressure;
+
+        self.read_altitude_relative_to(pressure)
     }
 }
