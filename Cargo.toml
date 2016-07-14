@@ -2,6 +2,10 @@
 authors = ["Nate Mara <natemara@gmail.com>"]
 name = "bmp280"
 version = "0.1.0"
+description = "A simple library for using the Bosch BMP280 barometer and altimeter"
+license = "MIT"
+repository = "https://github.com/natemara/bmp280"
+homepage = "https://github.com/natemara/bmp280"
 
 [dependencies]
 byteorder = "0.5.3"
