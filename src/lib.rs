@@ -10,9 +10,14 @@ use std::io::Cursor;
 const DEFAULT_I2C_ADDRESS: u16 = 0x77;
 const DEFAULT_I2C_PATH: &'static str = "/dev/i2c-1";
 
+/// Wrapper type for results
 pub type Result<T> = std::result::Result<T, Error>;
+
+///
 type Endiness = BigEndian;
 
+/// Errors that all functions could return. Errors will either be from the i2cdev library or the
+/// byteorder library.
 pub enum Error {
     I2cError(LinuxI2CError),
     IoError(std::io::Error),
@@ -37,6 +42,7 @@ impl From<()> for Error {
     }
 }
 
+/// All of the registers for the BMP280
 enum Register {
     DigT1,
     DigT2,
@@ -62,7 +68,7 @@ enum Register {
     Control,
     Config,
     PressureData,
-    TempData,
+    TemperatureData,
 }
 
 impl<'a> std::convert::From<&'a Register> for u8 {
@@ -92,11 +98,13 @@ impl<'a> std::convert::From<&'a Register> for u8 {
             Control => 0xF4,
             Config => 0xF5,
             PressureData => 0xF7,
-            TempData => 0xFA,
+            TemperatureData => 0xFA,
         }
     }
 }
 
+/// Calibration data for the BMP280. There is no need to create this struct manually, it will
+/// automatically be created.
 struct Calibration {
     dig_t1: u16,
     dig_t2: i16,
@@ -126,6 +134,7 @@ impl core::default::Default for Calibration {
     }
 }
 
+/// A single BMP280 sensor
 pub struct Bmp280 {
     sensor_id: i32,
     fine: i32,
@@ -134,6 +143,20 @@ pub struct Bmp280 {
     ground_pressure: f32,
 }
 
+/// A builder for Bmp280 sensors.
+///
+/// ```
+/// let mut sensor = Bmp280Builder::new()
+///     .address(0x20)
+///     .path("/dev/i2c-1".to_string())
+///     .build().ok("Failed to build device");
+///
+/// let altitude = sensor.read_altitude();
+///
+/// // Minimal example
+/// let mut sensor = Bmp280Builder::new().build().ok("Failed to build device");
+/// let altitude = sensor.read_altitude();
+/// ```
 pub struct Bmp280Builder {
     i2c_address: u16,
     i2c_device: Option<LinuxI2CDevice>,
@@ -151,26 +174,35 @@ impl Bmp280Builder {
         }
     }
 
+    /// Set the address of the I2C device for the sensor. There is a default value for this, so you
+    /// do not need to specify it explicitly.
     pub fn address(&mut self, address: u16) -> &mut Self {
         self.i2c_address = address;
         self
     }
 
+    /// Set the I2C device for the sensor. If you do not specify this, one will be generated from
+    /// the values for address and path.
     pub fn device(&mut self, device: LinuxI2CDevice) -> &mut Self {
         self.i2c_device = Some(device);
         self
     }
 
+    /// Set the path of the I2C device for the sensor.  There is a default value for this, so you
+    /// do not need to specify it explicitly.
     pub fn path(&mut self, path: String) -> &mut Self {
         self.i2c_path = path;
         self
     }
 
+    /// Set the ground pressure for the sensor. If you do not specify this, the altitude will be
+    /// zeroed when you call .build().
     pub fn ground_pressure(&mut self, pressure: f32) -> &mut Self {
         self.ground_pressure = pressure;
         self
     }
 
+    /// Attempt to build a Bmp280 sensor from this builder.
     pub fn build(self) -> Result<Bmp280> {
         let dev = match self.i2c_device {
             Some(dev) => dev,
@@ -202,6 +234,7 @@ impl Bmp280 {
         Ok(())
     }
 
+    /// Will set the relative pressure for ground level readings for .read_altitude().
     pub fn zero(&mut self) -> Result<()> {
         self.ground_pressure = try!(self.read_pressure());
 
@@ -326,7 +359,7 @@ impl Bmp280 {
     }
 
     pub fn read_temperature(&mut self) -> Result<f32> {
-        let mut adc_t = try!(self.read24(&Register::TempData)) as i32;
+        let mut adc_t = try!(self.read24(&Register::TemperatureData)) as i32;
         adc_t >>= 4;
 
         let t1 = self.calibration.dig_t1 as i32;
@@ -383,6 +416,7 @@ impl Bmp280 {
         Ok(p as f32 / 256.)
     }
 
+    /// Reads the altitude from the sensor relative to the given sea level pressure.
     pub fn read_altitude_relative_to(&mut self, sea_level_hpa: f32) -> Result<f32> {
         let pressure = try!(self.read_pressure()) as f32 / 100.;
 
@@ -390,6 +424,9 @@ impl Bmp280 {
         Ok(altitude)
     }
 
+    /// Reads the altitude from the sensor relative to the zeroed altitude set by .zero(),
+    /// Bmp280Builder.ground_pressure(), or Bmp280Builder.build() if you do not set a ground
+    /// pressure.
     pub fn read_altitude(&mut self) -> Result<f32> {
         let pressure = self.ground_pressure;
 
