@@ -145,7 +145,7 @@ pub struct Bmp280 {
 
 /// A builder for Bmp280 sensors.
 ///
-/// ```
+/// ```ignore
 /// let mut sensor = Bmp280Builder::new()
 ///     .address(0x20)
 ///     .path("/dev/i2c-1".to_string())
