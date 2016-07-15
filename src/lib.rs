@@ -160,7 +160,6 @@ pub struct Bmp280 {
 /// ```
 pub struct Bmp280Builder {
     i2c_address: u16,
-    i2c_device: Option<LinuxI2CDevice>,
     i2c_path: String,
     ground_pressure: f32,
 }
@@ -169,7 +168,6 @@ impl Bmp280Builder {
     pub fn new() -> Self {
         Bmp280Builder {
             i2c_address: DEFAULT_I2C_ADDRESS,
-            i2c_device: Option::None,
             i2c_path: DEFAULT_I2C_PATH.to_string(),
             ground_pressure: 0.,
         }
@@ -179,13 +177,6 @@ impl Bmp280Builder {
     /// do not need to specify it explicitly.
     pub fn address(&mut self, address: u16) -> &mut Self {
         self.i2c_address = address;
-        self
-    }
-
-    /// Set the I2C device for the sensor. If you do not specify this, one will be generated from
-    /// the values for address and path.
-    pub fn device(&mut self, device: LinuxI2CDevice) -> &mut Self {
-        self.i2c_device = Some(device);
         self
     }
 
@@ -204,11 +195,8 @@ impl Bmp280Builder {
     }
 
     /// Attempt to build a Bmp280 sensor from this builder.
-    pub fn build(self) -> Result<Bmp280> {
-        let dev = match self.i2c_device {
-            Some(dev) => dev,
-            None => try!(LinuxI2CDevice::new(self.i2c_path, self.i2c_address)),
-        };
+    pub fn build(&self) -> Result<Bmp280> {
+        let dev = try!(LinuxI2CDevice::new(&self.i2c_path, self.i2c_address));
 
         let mut sensor = Bmp280 {
             i2c_device: dev,
