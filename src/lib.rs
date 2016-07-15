@@ -18,6 +18,7 @@ type Endiness = BigEndian;
 
 /// Errors that all functions could return. Errors will either be from the i2cdev library or the
 /// byteorder library.
+#[derive(Debug)]
 pub enum Error {
     I2cError(LinuxI2CError),
     IoError(std::io::Error),
