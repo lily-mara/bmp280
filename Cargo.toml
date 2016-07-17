@@ -11,3 +11,7 @@ documentation = "https://natemara.github.io/rust-docs/bmp280/bmp280/"
 [dependencies]
 byteorder = "0.5.3"
 i2cdev = "0.3.0"
+
+[[bin]]
+name = "bmp280"
+doc = false

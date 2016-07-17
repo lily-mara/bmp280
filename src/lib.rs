@@ -3,9 +3,11 @@ extern crate byteorder;
 extern crate core;
 
 use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
+use i2cdev::sensors::{Barometer, Thermometer};
 use i2cdev::core::I2CDevice;
 use byteorder::{LittleEndian, BigEndian, WriteBytesExt, ReadBytesExt};
 use std::io::Cursor;
+use std::fmt;
 
 const DEFAULT_I2C_ADDRESS: u16 = 0x77;
 const DEFAULT_I2C_PATH: &'static str = "/dev/i2c-1";
@@ -152,11 +154,11 @@ pub struct Bmp280 {
 ///     .path("/dev/i2c-1".to_string())
 ///     .build().ok("Failed to build device");
 ///
-/// let altitude = sensor.read_altitude();
+/// let altitude = sensor.altitude_m();
 ///
 /// // Minimal example
 /// let mut sensor = Bmp280Builder::new().build().ok("Failed to build device");
-/// let altitude = sensor.read_altitude();
+/// let altitude = sensor.altitude_m();
 /// ```
 pub struct Bmp280Builder {
     i2c_address: u16,
@@ -218,14 +220,13 @@ impl Bmp280Builder {
 
 impl Bmp280 {
     fn write8(&mut self, reg: &Register, value: u8) -> Result<()> {
-        try!(self.i2c_device.write(&[reg.into()]));
-        try!(self.i2c_device.write(&[value]));
+        try!(self.i2c_device.write(&[reg.into(), value]));
         Ok(())
     }
 
     /// Will set the relative pressure for ground level readings for .read_altitude().
     pub fn zero(&mut self) -> Result<()> {
-        self.ground_pressure = try!(self.read_pressure());
+        self.ground_pressure = try!(self.pressure_kpa()) * 1000.;
 
         Ok(())
     }
@@ -247,8 +248,10 @@ impl Bmp280 {
         let mut buf = vec![0u8, 0u8];
         try!(buf.write_u16::<Endiness>(value));
 
-        try!(self.i2c_device.write(&[reg.into()]));
-        try!(self.i2c_device.write(&buf));
+        let mut data = vec![reg.into()];
+        data.extend(buf);
+
+        try!(self.i2c_device.write(&data));
 
         Ok(())
     }
@@ -347,7 +350,27 @@ impl Bmp280 {
         Ok(())
     }
 
-    pub fn read_temperature(&mut self) -> Result<f32> {
+    /// Reads the altitude from the sensor relative to the given sea level pressure.
+    pub fn altitude_m_relative(&mut self, sea_level_pa: f32) -> Result<f32> {
+        let pressure = try!(self.pressure_kpa()) * 1000.;
+
+        let altitude = 44330. * (1. - (pressure / sea_level_pa).powf(0.1903));
+        Ok(altitude)
+    }
+
+    /// Reads the altitude from the sensor relative to the zeroed altitude set by .zero(),
+    /// Bmp280Builder.ground_pressure(), or Bmp280Builder.build() if you do not set a ground
+    /// pressure.
+    pub fn altitude_m(&mut self) -> Result<f32> {
+        let pressure = self.ground_pressure;
+
+        self.altitude_m_relative(pressure)
+    }
+}
+
+impl Thermometer for Bmp280 {
+    type Error = Error;
+    fn temperature_celsius(&mut self) -> Result<f32> {
         let mut adc_t = try!(self.read24(&Register::TemperatureData)) as i32;
         adc_t >>= 4;
 
@@ -363,10 +386,13 @@ impl Bmp280 {
         let t = ((self.fine * 5 + 128) >> 8) as f32;
         Ok(t / 100.)
     }
+}
 
-    pub fn read_pressure(&mut self) -> Result<f32> {
+impl Barometer for Bmp280 {
+    type Error = Error;
+    fn pressure_kpa(&mut self) -> Result<f32> {
         // This is done to initialize the self.fine value.
-        try!(self.read_temperature());
+        try!(self.temperature_celsius());
 
         let adc_p = (try!(self.read24(&Register::PressureData)) as i32) >> 4;
 
@@ -402,23 +428,22 @@ impl Bmp280 {
 
         let p = ((p + var1 + var2) >> 8) + (p7 << 4);
 
-        Ok(p as f32 / 256.)
+        Ok(p as f32 / 256000.)
     }
+}
 
-    /// Reads the altitude from the sensor relative to the given sea level pressure.
-    pub fn read_altitude_relative_to(&mut self, sea_level_hpa: f32) -> Result<f32> {
-        let pressure = try!(self.read_pressure()) as f32 / 100.;
-
-        let altitude = 44330. * (1. - (pressure / sea_level_hpa).powf(0.1903));
-        Ok(altitude)
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Error: {:?}", self)
     }
+}
 
-    /// Reads the altitude from the sensor relative to the zeroed altitude set by .zero(),
-    /// Bmp280Builder.ground_pressure(), or Bmp280Builder.build() if you do not set a ground
-    /// pressure.
-    pub fn read_altitude(&mut self) -> Result<f32> {
-        let pressure = self.ground_pressure;
-
-        self.read_altitude_relative_to(pressure)
+impl std::error::Error for Error {
+    fn description(&self) -> &str {
+        match *self {
+            Error::I2cError(_) => "I2cError",
+            Error::IoError(_) => "IoError",
+            Error::Other(()) => "Generic error",
+        }
     }
 }
