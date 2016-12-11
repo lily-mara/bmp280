@@ -190,7 +190,7 @@ impl Bmp280Builder {
     }
 
     /// Set the ground pressure for the sensor. If you do not specify this, the altitude will be
-    /// zeroed when you call .build().
+    /// zeroed when you call `.build()`.
     pub fn ground_pressure(&mut self, pressure: f32) -> &mut Self {
         self.ground_pressure = pressure;
         self
@@ -224,11 +224,12 @@ impl Bmp280 {
         Ok(())
     }
 
-    /// Will set the relative pressure for ground level readings for .read_altitude().
-    pub fn zero(&mut self) -> Result<()> {
+    /// Will set the relative pressure for ground level readings for `.read_altitude()`. Returns the
+    /// ground pressure in kpa
+    pub fn zero(&mut self) -> Result<f32> {
         self.ground_pressure = try!(self.pressure_kpa()) * 1000.;
 
-        Ok(())
+        Ok(self.ground_pressure)
     }
 
     fn read8(&mut self, reg: &Register) -> Result<u8> {
@@ -358,8 +359,8 @@ impl Bmp280 {
         Ok(altitude)
     }
 
-    /// Reads the altitude from the sensor relative to the zeroed altitude set by .zero(),
-    /// Bmp280Builder.ground_pressure(), or Bmp280Builder.build() if you do not set a ground
+    /// Reads the altitude from the sensor relative to the zeroed altitude set by `.zero()`,
+    /// Bmp280Builder.ground_pressure(), or `Bmp280Builder::build()` if you do not set a ground
     /// pressure.
     pub fn altitude_m(&mut self) -> Result<f32> {
         let pressure = self.ground_pressure;
