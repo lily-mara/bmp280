@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 extern crate i2cdev;
 extern crate byteorder;
 
@@ -121,12 +122,12 @@ struct Calibration {
     dig_p8: i16,
     dig_p9: i16,
 
-    dig_h1: u8,
-    dig_h2: i16,
-    dig_h3: u8,
-    dig_h4: i16,
-    dig_h5: i16,
-    dig_h6: i8,
+    _dig_h1: u8,
+    _dig_h2: i16,
+    _dig_h3: u8,
+    _dig_h4: i16,
+    _dig_h5: i16,
+    _dig_h6: i8,
 }
 
 impl core::default::Default for Calibration {
@@ -196,7 +197,7 @@ impl Bmp280Builder {
 
     /// Attempt to build a Bmp280 sensor from this builder.
     pub fn build(&self) -> Result<Bmp280> {
-        let dev = try!(LinuxI2CDevice::new(&self.i2c_path, self.i2c_address));
+        let dev = LinuxI2CDevice::new(&self.i2c_path, self.i2c_address)?;
 
         let mut sensor = Bmp280 {
             i2c_device: dev,
@@ -206,10 +207,10 @@ impl Bmp280Builder {
             ground_pressure: self.ground_pressure,
         };
 
-        try!(sensor.begin());
+        sensor.begin()?;
 
         if self.ground_pressure != 0. {
-            try!(sensor.zero());
+            sensor.zero()?;
         }
 
         Ok(sensor)
@@ -218,14 +219,14 @@ impl Bmp280Builder {
 
 impl Bmp280 {
     fn write8(&mut self, reg: &Register, value: u8) -> Result<()> {
-        try!(self.i2c_device.write(&[reg.into(), value]));
+        self.i2c_device.write(&[reg.into(), value])?;
         Ok(())
     }
 
     /// Will set the relative pressure for ground level readings for `.read_altitude()`. Returns the
     /// ground pressure in kpa
     pub fn zero(&mut self) -> Result<f32> {
-        self.ground_pressure = try!(self.pressure_kpa()) * 1000.;
+        self.ground_pressure = self.pressure_kpa()? * 1000.;
 
         Ok(self.ground_pressure)
     }
@@ -233,24 +234,24 @@ impl Bmp280 {
     fn read8(&mut self, reg: &Register) -> Result<u8> {
         let mut buf = [0u8; 1];
 
-        try!(self.i2c_device.write(&[reg.into()]));
-        try!(self.i2c_device.read(&mut buf));
+        self.i2c_device.write(&[reg.into()])?;
+        self.i2c_device.read(&mut buf)?;
 
         let mut curs = Cursor::new(buf);
 
-        let val = try!(curs.read_u8());
+        let val = curs.read_u8()?;
 
         Ok(val)
     }
 
     fn write16(&mut self, reg: &Register, value: u16) -> Result<()> {
         let mut buf = vec![0u8, 0u8];
-        try!(buf.write_u16::<Endiness>(value));
+        buf.write_u16::<Endiness>(value)?;
 
         let mut data = vec![reg.into()];
         data.extend(buf);
 
-        try!(self.i2c_device.write(&data));
+        self.i2c_device.write(&data)?;
 
         Ok(())
     }
@@ -258,12 +259,12 @@ impl Bmp280 {
     fn read16(&mut self, reg: &Register) -> Result<u16> {
         let mut buf = [0u8; 2];
 
-        try!(self.i2c_device.write(&[reg.into()]));
-        try!(self.i2c_device.read(&mut buf));
+        self.i2c_device.write(&[reg.into()])?;
+        self.i2c_device.read(&mut buf)?;
 
         let mut curs = Cursor::new(buf);
 
-        let val = try!(curs.read_u16::<Endiness>());
+        let val = curs.read_u16::<Endiness>()?;
 
         Ok(val)
     }
@@ -271,12 +272,12 @@ impl Bmp280 {
     fn read16s(&mut self, reg: &Register) -> Result<i16> {
         let mut buf = [0u8; 2];
 
-        try!(self.i2c_device.write(&[reg.into()]));
-        try!(self.i2c_device.read(&mut buf));
+        self.i2c_device.write(&[reg.into()])?;
+        self.i2c_device.read(&mut buf)?;
 
         let mut curs = Cursor::new(buf);
 
-        let val = try!(curs.read_i16::<Endiness>());
+        let val = curs.read_i16::<Endiness>()?;
 
         Ok(val)
     }
@@ -284,12 +285,12 @@ impl Bmp280 {
     fn read16le(&mut self, reg: &Register) -> Result<u16> {
         let mut buf = [0u8; 2];
 
-        try!(self.i2c_device.write(&[reg.into()]));
-        try!(self.i2c_device.read(&mut buf));
+        self.i2c_device.write(&[reg.into()])?;
+        self.i2c_device.read(&mut buf)?;
 
         let mut curs = Cursor::new(buf);
 
-        let val = try!(curs.read_u16::<LittleEndian>());
+        let val = curs.read_u16::<LittleEndian>()?;
 
         Ok(val)
     }
@@ -297,12 +298,12 @@ impl Bmp280 {
     fn read16les(&mut self, reg: &Register) -> Result<i16> {
         let mut buf = [0u8; 2];
 
-        try!(self.i2c_device.write(&[reg.into()]));
-        try!(self.i2c_device.read(&mut buf));
+        self.i2c_device.write(&[reg.into()])?;
+        self.i2c_device.read(&mut buf)?;
 
         let mut curs = Cursor::new(buf);
 
-        let val = try!(curs.read_i16::<LittleEndian>());
+        let val = curs.read_i16::<LittleEndian>()?;
 
         Ok(val)
     }
@@ -310,48 +311,48 @@ impl Bmp280 {
     fn read24(&mut self, reg: &Register) -> Result<u32> {
         let mut buf = [0u8; 3];
 
-        try!(self.i2c_device.write(&[reg.into()]));
-        try!(self.i2c_device.read(&mut buf));
+        self.i2c_device.write(&[reg.into()])?;
+        self.i2c_device.read(&mut buf)?;
 
         let mut curs = Cursor::new(buf);
 
-        let val = try!(curs.read_uint::<Endiness>(3));
+        let val = curs.read_uint::<Endiness>(3)?;
 
         Ok(val as u32)
     }
 
     fn read_coefficients(&mut self) -> Result<()> {
-        self.calibration.dig_t1 = try!(self.read16le(&Register::DigT1));
-        self.calibration.dig_t2 = try!(self.read16les(&Register::DigT2));
-        self.calibration.dig_t3 = try!(self.read16les(&Register::DigT3));
+        self.calibration.dig_t1 = self.read16le(&Register::DigT1)?;
+        self.calibration.dig_t2 = self.read16les(&Register::DigT2)?;
+        self.calibration.dig_t3 = self.read16les(&Register::DigT3)?;
 
-        self.calibration.dig_p1 = try!(self.read16le(&Register::DigP1));
-        self.calibration.dig_p2 = try!(self.read16les(&Register::DigP2));
-        self.calibration.dig_p3 = try!(self.read16les(&Register::DigP3));
-        self.calibration.dig_p4 = try!(self.read16les(&Register::DigP4));
-        self.calibration.dig_p5 = try!(self.read16les(&Register::DigP5));
-        self.calibration.dig_p6 = try!(self.read16les(&Register::DigP6));
-        self.calibration.dig_p7 = try!(self.read16les(&Register::DigP7));
-        self.calibration.dig_p8 = try!(self.read16les(&Register::DigP8));
-        self.calibration.dig_p9 = try!(self.read16les(&Register::DigP9));
+        self.calibration.dig_p1 = self.read16le(&Register::DigP1)?;
+        self.calibration.dig_p2 = self.read16les(&Register::DigP2)?;
+        self.calibration.dig_p3 = self.read16les(&Register::DigP3)?;
+        self.calibration.dig_p4 = self.read16les(&Register::DigP4)?;
+        self.calibration.dig_p5 = self.read16les(&Register::DigP5)?;
+        self.calibration.dig_p6 = self.read16les(&Register::DigP6)?;
+        self.calibration.dig_p7 = self.read16les(&Register::DigP7)?;
+        self.calibration.dig_p8 = self.read16les(&Register::DigP8)?;
+        self.calibration.dig_p9 = self.read16les(&Register::DigP9)?;
 
         Ok(())
     }
 
     fn begin(&mut self) -> Result<()> {
-        if try!(self.read8(&Register::ChipId)) != 0x58 {
+        if self.read8(&Register::ChipId)? != 0x58 {
             return Err(Error::Other(()));
         }
 
-        try!(self.read_coefficients());
-        try!(self.write8(&Register::Control, 0x3F));
+        self.read_coefficients()?;
+        self.write8(&Register::Control, 0x3F)?;
 
         Ok(())
     }
 
     /// Reads the altitude from the sensor relative to the given sea level pressure.
     pub fn altitude_m_relative(&mut self, sea_level_pa: f32) -> Result<f32> {
-        let pressure = try!(self.pressure_kpa()) * 1000.;
+        let pressure = self.pressure_kpa()? * 1000.;
 
         let altitude = 44330. * (1. - (pressure / sea_level_pa).powf(0.1903));
         Ok(altitude)
@@ -367,7 +368,7 @@ impl Bmp280 {
     }
 
     pub fn temperature_celsius(&mut self) -> Result<f32> {
-        let mut adc_t = try!(self.read24(&Register::TemperatureData)) as i32;
+        let mut adc_t = self.read24(&Register::TemperatureData)? as i32;
         adc_t >>= 4;
 
         let t1 = self.calibration.dig_t1 as i32;
@@ -385,9 +386,9 @@ impl Bmp280 {
 
     pub fn pressure_kpa(&mut self) -> Result<f32> {
         // This is done to initialize the self.fine value.
-        try!(self.temperature_celsius());
+        self.temperature_celsius()?;
 
-        let adc_p = (try!(self.read24(&Register::PressureData)) as i32) >> 4;
+        let adc_p = (self.read24(&Register::PressureData)? as i32) >> 4;
 
         let p1 = self.calibration.dig_p1 as i64;
         let p2 = self.calibration.dig_p2 as i64;
