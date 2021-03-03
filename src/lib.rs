@@ -1,9 +1,7 @@
 extern crate i2cdev;
 extern crate byteorder;
-extern crate core;
 
 use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
-use i2cdev::sensors::{Barometer, Thermometer};
 use i2cdev::core::I2CDevice;
 use byteorder::{LittleEndian, BigEndian, WriteBytesExt, ReadBytesExt};
 use std::io::Cursor;
@@ -367,11 +365,8 @@ impl Bmp280 {
 
         self.altitude_m_relative(pressure)
     }
-}
 
-impl Thermometer for Bmp280 {
-    type Error = Error;
-    fn temperature_celsius(&mut self) -> Result<f32> {
+    pub fn temperature_celsius(&mut self) -> Result<f32> {
         let mut adc_t = try!(self.read24(&Register::TemperatureData)) as i32;
         adc_t >>= 4;
 
@@ -387,11 +382,8 @@ impl Thermometer for Bmp280 {
         let t = ((self.fine * 5 + 128) >> 8) as f32;
         Ok(t / 100.)
     }
-}
 
-impl Barometer for Bmp280 {
-    type Error = Error;
-    fn pressure_kpa(&mut self) -> Result<f32> {
+    pub fn pressure_kpa(&mut self) -> Result<f32> {
         // This is done to initialize the self.fine value.
         try!(self.temperature_celsius());
 
@@ -431,6 +423,7 @@ impl Barometer for Bmp280 {
 
         Ok(p as f32 / 256000.)
     }
+
 }
 
 impl fmt::Display for Error {

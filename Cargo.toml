@@ -7,10 +7,11 @@ license = "MIT"
 repository = "https://github.com/natemara/bmp280"
 homepage = "https://github.com/natemara/bmp280"
 documentation = "https://docs.rs/bmp280"
+# edition = "2018"
 
 [dependencies]
-byteorder = "0.5.3"
-i2cdev = "0.3.0"
+byteorder = "1.4.2"
+i2cdev = "0.4.4"
 
 [[bin]]
 name = "bmp280"

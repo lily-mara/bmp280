@@ -2,7 +2,6 @@ extern crate bmp280;
 extern crate i2cdev;
 
 use bmp280::Bmp280Builder;
-use i2cdev::sensors::{Thermometer, Barometer};
 
 fn main() {
     let mut dev = Bmp280Builder::new()
