@@ -2,7 +2,8 @@
 
 A simple library for using the Bosch BMP280 barometer and altimeter.
 
-The following example can be run using `$ cargo run --example simple`
+The following example can be run using `$ cargo run --example simple`. 
+This library has been tested on an Odroid-C4 using an [Adafruit BMP280](https://www.adafruit.com/product/2651) module.
 
 ```rust
 use bmp280::Bmp280Builder;
