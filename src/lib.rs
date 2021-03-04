@@ -11,7 +11,7 @@ use std::fmt;
 use std::io::Cursor;
 
 const DEFAULT_I2C_ADDRESS: u16 = 0x77;
-const DEFAULT_I2C_PATH: &'static str = "/dev/i2c-1";
+const DEFAULT_I2C_PATH: &str = "/dev/i2c-1";
 
 /// Wrapper type for results
 pub type Result<T> = std::result::Result<T, Error>;
@@ -40,8 +40,8 @@ impl From<std::io::Error> for Error {
 }
 
 impl From<()> for Error {
-    fn from(f: ()) -> Self {
-        Error::Other(f)
+    fn from(_f: ()) -> Self {
+        Error::Other(())
     }
 }
 
@@ -405,7 +405,7 @@ impl Bmp280 {
         let var2 = var2 + (p4 << 35);
 
         let var1 = ((var1 * var1 * p3) >> 8) + ((var1 * p2) << 12);
-        let var1 = (((1i64) << 47) + var1) * (p1) >> 33;
+        let var1 = ((((1i64) << 47) + var1) * (p1)) >> 33;
 
         if var1 == 0 {
             return Err(Error::Other(()));
@@ -420,6 +420,12 @@ impl Bmp280 {
         let p = ((p + var1 + var2) >> 8) + (p7 << 4);
 
         Ok(p as f32 / 256000.)
+    }
+}
+
+impl Default for Bmp280Builder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
