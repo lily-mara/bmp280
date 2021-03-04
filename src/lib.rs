@@ -1,14 +1,14 @@
 //! A simple library for using the Bosch BMP280 barometer and altimeter.
 
 #![allow(dead_code)]
-extern crate i2cdev;
 extern crate byteorder;
+extern crate i2cdev;
 
-use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
+use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 use i2cdev::core::I2CDevice;
-use byteorder::{LittleEndian, BigEndian, WriteBytesExt, ReadBytesExt};
-use std::io::Cursor;
+use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
 use std::fmt;
+use std::io::Cursor;
 
 const DEFAULT_I2C_ADDRESS: u16 = 0x77;
 const DEFAULT_I2C_PATH: &'static str = "/dev/i2c-1";
@@ -373,7 +373,7 @@ impl Bmp280 {
         let t2 = self.calibration.dig_t2 as i32;
         let t3 = self.calibration.dig_t3 as i32;
 
-        let var1 = ((((adc_t >> 3) - (t1 << 1))) * t2) >> 11;
+        let var1 = (((adc_t >> 3) - (t1 << 1)) * t2) >> 11;
         let var2 = (((((adc_t >> 4) - t1) * ((adc_t >> 4) - t1)) >> 12) * t3) >> 14;
 
         self.fine = var1 + var2;
@@ -405,12 +405,11 @@ impl Bmp280 {
         let var2 = var2 + (p4 << 35);
 
         let var1 = ((var1 * var1 * p3) >> 8) + ((var1 * p2) << 12);
-        let var1 = ((((1i64) << 47) + var1)) * (p1) >> 33;
+        let var1 = (((1i64) << 47) + var1) * (p1) >> 33;
 
         if var1 == 0 {
             return Err(Error::Other(()));
         }
-
 
         let p: i64 = 1048576 - adc_p as i64;
         let p = (((p << 31) - var2) * 3125) / var1;
@@ -422,7 +421,6 @@ impl Bmp280 {
 
         Ok(p as f32 / 256000.)
     }
-
 }
 
 impl fmt::Display for Error {

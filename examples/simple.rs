@@ -15,5 +15,4 @@ fn main() {
         println!("{:?} c", dev.temperature_celsius().unwrap());
         std::thread::sleep(std::time::Duration::from_millis(250));
     }
-
 }
