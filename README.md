@@ -2,9 +2,9 @@
 
 A simple library for using the Bosch BMP280 barometer and altimeter.
 
+The following example can be run using `$ cargo run --example simple`
+
 ```rust
-extern crate bmp280;
-extern crate i2cdev;
 
 use bmp280::Bmp280Builder;
 

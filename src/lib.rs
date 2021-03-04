@@ -1,3 +1,5 @@
+//! A simple library for using the Bosch BMP280 barometer and altimeter.
+
 #![allow(dead_code)]
 extern crate i2cdev;
 extern crate byteorder;
@@ -14,7 +16,6 @@ const DEFAULT_I2C_PATH: &'static str = "/dev/i2c-1";
 /// Wrapper type for results
 pub type Result<T> = std::result::Result<T, Error>;
 
-///
 type Endiness = BigEndian;
 
 /// Errors that all functions could return. Errors will either be from the i2cdev library or the
@@ -148,15 +149,12 @@ pub struct Bmp280 {
 /// A builder for Bmp280 sensors.
 ///
 /// ```ignore
+/// use bmp280::Bmp280Builder;
 /// let mut sensor = Bmp280Builder::new()
-///     .address(0x20)
-///     .path("/dev/i2c-1".to_string())
-///     .build().ok("Failed to build device");
+///     .address(0x20) // Optional
+///     .path("/dev/i2c-1") // Optional
+///     .build().expect("Could not build device");
 ///
-/// let altitude = sensor.altitude_m();
-///
-/// // Minimal example
-/// let mut sensor = Bmp280Builder::new().build().ok("Failed to build device");
 /// let altitude = sensor.altitude_m();
 /// ```
 pub struct Bmp280Builder {
@@ -183,8 +181,8 @@ impl Bmp280Builder {
 
     /// Set the path of the I2C device for the sensor.  There is a default value for this, so you
     /// do not need to specify it explicitly.
-    pub fn path(&mut self, path: String) -> &mut Self {
-        self.i2c_path = path;
+    pub fn path(&mut self, path: &str) -> &mut Self {
+        self.i2c_path = path.to_string();
         self
     }
 

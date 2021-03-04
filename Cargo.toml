@@ -13,6 +13,4 @@ edition = "2018"
 byteorder = "1.4.2"
 i2cdev = "0.4.4"
 
-[[bin]]
-name = "bmp280"
-doc = false
+
