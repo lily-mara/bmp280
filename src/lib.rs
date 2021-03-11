@@ -10,6 +10,7 @@ use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 use i2cdev::core::I2CDevice;
 use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
 use std::fmt;
+use std::path::PathBuf;
 use std::io::Cursor;
 
 const DEFAULT_I2C_ADDRESS: u16 = 0x77;
@@ -161,7 +162,7 @@ pub struct Bmp280 {
 /// ```
 pub struct Bmp280Builder {
     i2c_address: u16,
-    i2c_path: String,
+    i2c_path: PathBuf,
     ground_pressure: f32,
 }
 
@@ -169,7 +170,7 @@ impl Bmp280Builder {
     pub fn new() -> Self {
         Bmp280Builder {
             i2c_address: DEFAULT_I2C_ADDRESS,
-            i2c_path: DEFAULT_I2C_PATH.to_string(),
+            i2c_path: PathBuf::from(DEFAULT_I2C_PATH),
             ground_pressure: 0.,
         }
     }
@@ -183,8 +184,8 @@ impl Bmp280Builder {
 
     /// Set the path of the I2C device for the sensor.  There is a default value for this, so you
     /// do not need to specify it explicitly.
-    pub fn path(&mut self, path: &str) -> &mut Self {
-        self.i2c_path = path.to_string();
+    pub fn path(&mut self, path: impl Into<PathBuf>) -> &mut Self {
+        self.i2c_path = path.into();
         self
     }
 
