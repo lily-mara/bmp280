@@ -10,8 +10,8 @@ use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 use i2cdev::core::I2CDevice;
 use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
 use std::fmt;
-use std::path::PathBuf;
 use std::io::Cursor;
+use std::path::PathBuf;
 
 const DEFAULT_I2C_ADDRESS: u16 = 0x77;
 const DEFAULT_I2C_PATH: &str = "/dev/i2c-1";
