@@ -1,21 +1,24 @@
-extern crate i2cdev;
-extern crate byteorder;
-extern crate core;
+//! A simple library for using the Bosch BMP280 barometer and altimeter.
+//!
+//! This library has been tested on an Odroid-C4 using an [Adafruit BMP280](https://www.adafruit.com/product/2651) module.
 
-use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
-use i2cdev::sensors::{Barometer, Thermometer};
+#![allow(dead_code)]
+extern crate byteorder;
+extern crate i2cdev;
+
+use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 use i2cdev::core::I2CDevice;
-use byteorder::{LittleEndian, BigEndian, WriteBytesExt, ReadBytesExt};
-use std::io::Cursor;
+use i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
 use std::fmt;
+use std::io::Cursor;
+use std::path::PathBuf;
 
 const DEFAULT_I2C_ADDRESS: u16 = 0x77;
-const DEFAULT_I2C_PATH: &'static str = "/dev/i2c-1";
+const DEFAULT_I2C_PATH: &str = "/dev/i2c-1";
 
 /// Wrapper type for results
 pub type Result<T> = std::result::Result<T, Error>;
 
-///
 type Endiness = BigEndian;
 
 /// Errors that all functions could return. Errors will either be from the i2cdev library or the
@@ -40,8 +43,8 @@ impl From<std::io::Error> for Error {
 }
 
 impl From<()> for Error {
-    fn from(f: ()) -> Self {
-        Error::Other(f)
+    fn from(_f: ()) -> Self {
+        Error::Other(())
     }
 }
 
@@ -123,12 +126,12 @@ struct Calibration {
     dig_p8: i16,
     dig_p9: i16,
 
-    dig_h1: u8,
-    dig_h2: i16,
-    dig_h3: u8,
-    dig_h4: i16,
-    dig_h5: i16,
-    dig_h6: i8,
+    _dig_h1: u8,
+    _dig_h2: i16,
+    _dig_h3: u8,
+    _dig_h4: i16,
+    _dig_h5: i16,
+    _dig_h6: i8,
 }
 
 impl core::default::Default for Calibration {
@@ -149,20 +152,17 @@ pub struct Bmp280 {
 /// A builder for Bmp280 sensors.
 ///
 /// ```ignore
+/// use bmp280::Bmp280Builder;
 /// let mut sensor = Bmp280Builder::new()
-///     .address(0x20)
-///     .path("/dev/i2c-1".to_string())
-///     .build().ok("Failed to build device");
+///     .address(0x20) // Optional
+///     .path("/dev/i2c-1") // Optional
+///     .build().expect("Could not build device");
 ///
-/// let altitude = sensor.altitude_m();
-///
-/// // Minimal example
-/// let mut sensor = Bmp280Builder::new().build().ok("Failed to build device");
 /// let altitude = sensor.altitude_m();
 /// ```
 pub struct Bmp280Builder {
     i2c_address: u16,
-    i2c_path: String,
+    i2c_path: PathBuf,
     ground_pressure: f32,
 }
 
@@ -170,7 +170,7 @@ impl Bmp280Builder {
     pub fn new() -> Self {
         Bmp280Builder {
             i2c_address: DEFAULT_I2C_ADDRESS,
-            i2c_path: DEFAULT_I2C_PATH.to_string(),
+            i2c_path: PathBuf::from(DEFAULT_I2C_PATH),
             ground_pressure: 0.,
         }
     }
@@ -184,8 +184,8 @@ impl Bmp280Builder {
 
     /// Set the path of the I2C device for the sensor.  There is a default value for this, so you
     /// do not need to specify it explicitly.
-    pub fn path(&mut self, path: String) -> &mut Self {
-        self.i2c_path = path;
+    pub fn path(&mut self, path: impl Into<PathBuf>) -> &mut Self {
+        self.i2c_path = path.into();
         self
     }
 
@@ -198,7 +198,7 @@ impl Bmp280Builder {
 
     /// Attempt to build a Bmp280 sensor from this builder.
     pub fn build(&self) -> Result<Bmp280> {
-        let dev = try!(LinuxI2CDevice::new(&self.i2c_path, self.i2c_address));
+        let dev = LinuxI2CDevice::new(&self.i2c_path, self.i2c_address)?;
 
         let mut sensor = Bmp280 {
             i2c_device: dev,
@@ -208,10 +208,10 @@ impl Bmp280Builder {
             ground_pressure: self.ground_pressure,
         };
 
-        try!(sensor.begin());
+        sensor.begin()?;
 
         if self.ground_pressure != 0. {
-            try!(sensor.zero());
+            sensor.zero()?;
         }
 
         Ok(sensor)
@@ -220,14 +220,14 @@ impl Bmp280Builder {
 
 impl Bmp280 {
     fn write8(&mut self, reg: &Register, value: u8) -> Result<()> {
-        try!(self.i2c_device.write(&[reg.into(), value]));
+        self.i2c_device.write(&[reg.into(), value])?;
         Ok(())
     }
 
     /// Will set the relative pressure for ground level readings for `.read_altitude()`. Returns the
     /// ground pressure in kpa
     pub fn zero(&mut self) -> Result<f32> {
-        self.ground_pressure = try!(self.pressure_kpa()) * 1000.;
+        self.ground_pressure = self.pressure_kpa()? * 1000.;
 
         Ok(self.ground_pressure)
     }
@@ -235,24 +235,24 @@ impl Bmp280 {
     fn read8(&mut self, reg: &Register) -> Result<u8> {
         let mut buf = [0u8; 1];
 
-        try!(self.i2c_device.write(&[reg.into()]));
-        try!(self.i2c_device.read(&mut buf));
+        self.i2c_device.write(&[reg.into()])?;
+        self.i2c_device.read(&mut buf)?;
 
         let mut curs = Cursor::new(buf);
 
-        let val = try!(curs.read_u8());
+        let val = curs.read_u8()?;
 
         Ok(val)
     }
 
     fn write16(&mut self, reg: &Register, value: u16) -> Result<()> {
         let mut buf = vec![0u8, 0u8];
-        try!(buf.write_u16::<Endiness>(value));
+        buf.write_u16::<Endiness>(value)?;
 
         let mut data = vec![reg.into()];
         data.extend(buf);
 
-        try!(self.i2c_device.write(&data));
+        self.i2c_device.write(&data)?;
 
         Ok(())
     }
@@ -260,12 +260,12 @@ impl Bmp280 {
     fn read16(&mut self, reg: &Register) -> Result<u16> {
         let mut buf = [0u8; 2];
 
-        try!(self.i2c_device.write(&[reg.into()]));
-        try!(self.i2c_device.read(&mut buf));
+        self.i2c_device.write(&[reg.into()])?;
+        self.i2c_device.read(&mut buf)?;
 
         let mut curs = Cursor::new(buf);
 
-        let val = try!(curs.read_u16::<Endiness>());
+        let val = curs.read_u16::<Endiness>()?;
 
         Ok(val)
     }
@@ -273,12 +273,12 @@ impl Bmp280 {
     fn read16s(&mut self, reg: &Register) -> Result<i16> {
         let mut buf = [0u8; 2];
 
-        try!(self.i2c_device.write(&[reg.into()]));
-        try!(self.i2c_device.read(&mut buf));
+        self.i2c_device.write(&[reg.into()])?;
+        self.i2c_device.read(&mut buf)?;
 
         let mut curs = Cursor::new(buf);
 
-        let val = try!(curs.read_i16::<Endiness>());
+        let val = curs.read_i16::<Endiness>()?;
 
         Ok(val)
     }
@@ -286,12 +286,12 @@ impl Bmp280 {
     fn read16le(&mut self, reg: &Register) -> Result<u16> {
         let mut buf = [0u8; 2];
 
-        try!(self.i2c_device.write(&[reg.into()]));
-        try!(self.i2c_device.read(&mut buf));
+        self.i2c_device.write(&[reg.into()])?;
+        self.i2c_device.read(&mut buf)?;
 
         let mut curs = Cursor::new(buf);
 
-        let val = try!(curs.read_u16::<LittleEndian>());
+        let val = curs.read_u16::<LittleEndian>()?;
 
         Ok(val)
     }
@@ -299,12 +299,12 @@ impl Bmp280 {
     fn read16les(&mut self, reg: &Register) -> Result<i16> {
         let mut buf = [0u8; 2];
 
-        try!(self.i2c_device.write(&[reg.into()]));
-        try!(self.i2c_device.read(&mut buf));
+        self.i2c_device.write(&[reg.into()])?;
+        self.i2c_device.read(&mut buf)?;
 
         let mut curs = Cursor::new(buf);
 
-        let val = try!(curs.read_i16::<LittleEndian>());
+        let val = curs.read_i16::<LittleEndian>()?;
 
         Ok(val)
     }
@@ -312,48 +312,48 @@ impl Bmp280 {
     fn read24(&mut self, reg: &Register) -> Result<u32> {
         let mut buf = [0u8; 3];
 
-        try!(self.i2c_device.write(&[reg.into()]));
-        try!(self.i2c_device.read(&mut buf));
+        self.i2c_device.write(&[reg.into()])?;
+        self.i2c_device.read(&mut buf)?;
 
         let mut curs = Cursor::new(buf);
 
-        let val = try!(curs.read_uint::<Endiness>(3));
+        let val = curs.read_uint::<Endiness>(3)?;
 
         Ok(val as u32)
     }
 
     fn read_coefficients(&mut self) -> Result<()> {
-        self.calibration.dig_t1 = try!(self.read16le(&Register::DigT1));
-        self.calibration.dig_t2 = try!(self.read16les(&Register::DigT2));
-        self.calibration.dig_t3 = try!(self.read16les(&Register::DigT3));
+        self.calibration.dig_t1 = self.read16le(&Register::DigT1)?;
+        self.calibration.dig_t2 = self.read16les(&Register::DigT2)?;
+        self.calibration.dig_t3 = self.read16les(&Register::DigT3)?;
 
-        self.calibration.dig_p1 = try!(self.read16le(&Register::DigP1));
-        self.calibration.dig_p2 = try!(self.read16les(&Register::DigP2));
-        self.calibration.dig_p3 = try!(self.read16les(&Register::DigP3));
-        self.calibration.dig_p4 = try!(self.read16les(&Register::DigP4));
-        self.calibration.dig_p5 = try!(self.read16les(&Register::DigP5));
-        self.calibration.dig_p6 = try!(self.read16les(&Register::DigP6));
-        self.calibration.dig_p7 = try!(self.read16les(&Register::DigP7));
-        self.calibration.dig_p8 = try!(self.read16les(&Register::DigP8));
-        self.calibration.dig_p9 = try!(self.read16les(&Register::DigP9));
+        self.calibration.dig_p1 = self.read16le(&Register::DigP1)?;
+        self.calibration.dig_p2 = self.read16les(&Register::DigP2)?;
+        self.calibration.dig_p3 = self.read16les(&Register::DigP3)?;
+        self.calibration.dig_p4 = self.read16les(&Register::DigP4)?;
+        self.calibration.dig_p5 = self.read16les(&Register::DigP5)?;
+        self.calibration.dig_p6 = self.read16les(&Register::DigP6)?;
+        self.calibration.dig_p7 = self.read16les(&Register::DigP7)?;
+        self.calibration.dig_p8 = self.read16les(&Register::DigP8)?;
+        self.calibration.dig_p9 = self.read16les(&Register::DigP9)?;
 
         Ok(())
     }
 
     fn begin(&mut self) -> Result<()> {
-        if try!(self.read8(&Register::ChipId)) != 0x58 {
+        if self.read8(&Register::ChipId)? != 0x58 {
             return Err(Error::Other(()));
         }
 
-        try!(self.read_coefficients());
-        try!(self.write8(&Register::Control, 0x3F));
+        self.read_coefficients()?;
+        self.write8(&Register::Control, 0x3F)?;
 
         Ok(())
     }
 
     /// Reads the altitude from the sensor relative to the given sea level pressure.
     pub fn altitude_m_relative(&mut self, sea_level_pa: f32) -> Result<f32> {
-        let pressure = try!(self.pressure_kpa()) * 1000.;
+        let pressure = self.pressure_kpa()? * 1000.;
 
         let altitude = 44330. * (1. - (pressure / sea_level_pa).powf(0.1903));
         Ok(altitude)
@@ -367,19 +367,16 @@ impl Bmp280 {
 
         self.altitude_m_relative(pressure)
     }
-}
 
-impl Thermometer for Bmp280 {
-    type Error = Error;
-    fn temperature_celsius(&mut self) -> Result<f32> {
-        let mut adc_t = try!(self.read24(&Register::TemperatureData)) as i32;
+    pub fn temperature_celsius(&mut self) -> Result<f32> {
+        let mut adc_t = self.read24(&Register::TemperatureData)? as i32;
         adc_t >>= 4;
 
         let t1 = self.calibration.dig_t1 as i32;
         let t2 = self.calibration.dig_t2 as i32;
         let t3 = self.calibration.dig_t3 as i32;
 
-        let var1 = ((((adc_t >> 3) - (t1 << 1))) * t2) >> 11;
+        let var1 = (((adc_t >> 3) - (t1 << 1)) * t2) >> 11;
         let var2 = (((((adc_t >> 4) - t1) * ((adc_t >> 4) - t1)) >> 12) * t3) >> 14;
 
         self.fine = var1 + var2;
@@ -387,15 +384,12 @@ impl Thermometer for Bmp280 {
         let t = ((self.fine * 5 + 128) >> 8) as f32;
         Ok(t / 100.)
     }
-}
 
-impl Barometer for Bmp280 {
-    type Error = Error;
-    fn pressure_kpa(&mut self) -> Result<f32> {
+    pub fn pressure_kpa(&mut self) -> Result<f32> {
         // This is done to initialize the self.fine value.
-        try!(self.temperature_celsius());
+        self.temperature_celsius()?;
 
-        let adc_p = (try!(self.read24(&Register::PressureData)) as i32) >> 4;
+        let adc_p = (self.read24(&Register::PressureData)? as i32) >> 4;
 
         let p1 = self.calibration.dig_p1 as i64;
         let p2 = self.calibration.dig_p2 as i64;
@@ -414,12 +408,11 @@ impl Barometer for Bmp280 {
         let var2 = var2 + (p4 << 35);
 
         let var1 = ((var1 * var1 * p3) >> 8) + ((var1 * p2) << 12);
-        let var1 = ((((1i64) << 47) + var1)) * (p1) >> 33;
+        let var1 = ((((1i64) << 47) + var1) * (p1)) >> 33;
 
         if var1 == 0 {
             return Err(Error::Other(()));
         }
-
 
         let p: i64 = 1048576 - adc_p as i64;
         let p = (((p << 31) - var2) * 3125) / var1;
@@ -430,6 +423,12 @@ impl Barometer for Bmp280 {
         let p = ((p + var1 + var2) >> 8) + (p7 << 4);
 
         Ok(p as f32 / 256000.)
+    }
+}
+
+impl Default for Bmp280Builder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
